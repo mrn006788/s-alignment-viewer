@@ -45,18 +45,47 @@ end startServer
 
 -- ── Double-click ───────────────────────────────────────────────────
 on run
-    set ws to lastWorkspace()
-    if ws is "" then
-        display alert "No previous session" message "Drop a .bam file (and optionally a reference .fa) onto this app to start."
-        return
+    -- Step 1: Select BAM file
+    try
+        set bamAlias to choose file with prompt "Select a BAM file:" of type {"com.public.data", "public.data"} without invisibles
+    on error number -128
+        return -- user cancelled
+    end try
+    set bamFile to POSIX path of bamAlias
+
+    -- Workspace = directory containing BAM
+    set workDir to do shell script "dirname " & quoted form of bamFile
+
+    -- Check BAI index
+    set baiPath to bamFile & ".bai"
+    set baiExists to do shell script "test -f " & quoted form of baiPath & " && echo yes || echo no"
+    if baiExists is "no" then
+        set choice to button returned of (display alert "Index file missing" message (bamFile & ".bai not found.") & return & "Create it now with samtools?" buttons {"Cancel", "Create"} default button "Create")
+        if choice is "Cancel" then return
+        set samtoolsPath to do shell script "command -v samtools 2>/dev/null || echo /opt/homebrew/bin/samtools"
+        do shell script quoted form of samtoolsPath & " index " & quoted form of bamFile
     end if
-    -- Check igv.html exists in workspace
-    set hasHtml to do shell script "test -f " & quoted form of (ws & "/igv.html") & " && echo yes || echo no"
-    if hasHtml is "no" then
-        display alert "igv.html not found" message "Run setup first by dropping a .bam file onto this app." & return & return & "Workspace: " & ws
-        return
+
+    -- Check if setup was already done (reads_ref60.fa exists)
+    set hasRef to do shell script "test -f " & quoted form of (workDir & "/reads_ref60.fa") & " && echo yes || echo no"
+    if hasRef is "yes" then
+        set choice to button returned of (display alert "Open viewer" message "Reference already set up in:" & return & workDir & return & return & "Open the viewer with this data?" buttons {"Select different FASTA", "Open"} default button "Open")
+        if choice is "Open" then
+            startServer(workDir)
+            return
+        end if
     end if
-    startServer(ws)
+
+    -- Step 2: Select FASTA file
+    try
+        set faAlias to choose file with prompt "Select a reference FASTA file (.fa / .fasta / .fna):" without invisibles
+    on error number -128
+        return -- user cancelled
+    end try
+    set refFile to POSIX path of faAlias
+
+    -- Run setup
+    runSetup(bamFile, refFile, workDir)
 end run
 
 -- ── Drag & drop ────────────────────────────────────────────────────
