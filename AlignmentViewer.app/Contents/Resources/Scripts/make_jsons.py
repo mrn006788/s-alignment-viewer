@@ -107,7 +107,18 @@ for i, d in enumerate(cov_sorted):
         else:
             peak_pos = (bin_start + bin_end) // 2
     else:
+        # For rank 51+: show the full peak bin (100 kb) so all reads are in view
         peak_pos = (bin_start + bin_end) // 2
+        start = bin_start + 1
+        end   = min(bin_end, d['len'])
+        peaks.append({
+            'chr': chr_name,
+            'total_reads': d['total_reads'],
+            'len': d['len'],
+            'peak_pos': peak_pos,
+            'locus': f'{chr_name}:{start}-{end}',
+        })
+        continue
 
     start = max(1, peak_pos - 500)
     end   = peak_pos + 1000

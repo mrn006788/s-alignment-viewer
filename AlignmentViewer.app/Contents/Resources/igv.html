@@ -145,8 +145,7 @@ async function init() {
         indexURL: BASE + '/n1_sorted.bam.bai',
         name: 'n1 Alignments',
         height: 300,
-        visibilityWindow: 30000,
-        samplingDepth: 100,
+        visibilityWindow: 150000,
       }],
       locus: initLocus,
     });
@@ -219,7 +218,16 @@ function selectScaffold(chr) {
   const d = covMap[chr];
   if (!d || !browser) return;
   setActive(chr);
-  browser.search(d.locus);
+  // For low-read scaffolds the stored locus may be centered on the bin midpoint
+  // (not the actual read position). Show the full 100 kb bin instead so reads
+  // are always in view.
+  const BIN = 100000;
+  const binStart = Math.floor(d.peak_pos / BIN) * BIN;
+  const binEnd   = Math.min(binStart + BIN, d.len);
+  const locus = d.total_reads >= 50
+    ? d.locus
+    : `${chr}:${Math.max(1, binStart)}-${binEnd}`;
+  browser.search(locus);
 }
 
 function jumpToPeak() {
