@@ -37,6 +37,11 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sa
 .sc-bar{flex:1;height:3px;background:#1e2235;border-radius:2px;overflow:hidden}
 .sc-bar-fill{height:100%;background:#4f46e5;border-radius:2px}
 
+#min-reads-row{margin-top:6px}
+#min-reads-label{font-size:.68rem;color:#94a3b8;display:block;margin-bottom:2px}
+#min-reads-label b{color:#a5b4fc}
+#min-reads{width:100%;accent-color:#6366f1;cursor:pointer}
+
 /* Main area */
 #main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
 #toolbar{padding:5px 12px;background:#131625;border-bottom:1px solid #1e2235;display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex-shrink:0}
@@ -66,6 +71,10 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sa
   <div id="sidebar">
     <div id="sidebar-header">
       <input type="text" id="search" placeholder="🔍 Search scaffold…" oninput="filterList()">
+      <div id="min-reads-row">
+        <label id="min-reads-label">Min reads: <b id="min-reads-val">1</b></label>
+        <input type="range" id="min-reads" min="0" max="100" value="0" step="1" oninput="updateMinReads(this.value)">
+      </div>
     </div>
     <div id="scaffold-list"></div>
   </div>
@@ -95,6 +104,7 @@ let covMap = {};
 let covList = [];
 let activeChr = null;
 let maxReads = 1;
+let minReadsThreshold = 1;
 
 function setStatus(msg) { document.getElementById('status').textContent = msg; }
 
@@ -126,6 +136,7 @@ async function init() {
         name: 'n1 Assembly',
         fastaURL: BASE + '/reads_ref60.fa',
         indexURL: BASE + '/reads_ref60.fa.fai',
+        chromosomeOrder: covList.map(d => d.chr),
       },
       tracks: [{
         type: 'alignment',
@@ -134,6 +145,8 @@ async function init() {
         indexURL: BASE + '/n1_sorted.bam.bai',
         name: 'n1 Alignments',
         height: 300,
+        visibilityWindow: 30000,
+        samplingDepth: 100,
       }],
       locus: initLocus,
     });
@@ -176,9 +189,18 @@ function buildList(list) {
   });
 }
 
+function updateMinReads(val) {
+  const pct = parseInt(val);
+  const threshold = Math.round((pct / 100) * maxReads);
+  minReadsThreshold = Math.max(1, threshold);
+  document.getElementById('min-reads-val').textContent = minReadsThreshold.toLocaleString();
+  filterList();
+}
+
 function filterList() {
   const q = document.getElementById('search').value.toLowerCase();
-  const filtered = q ? covList.filter(d => d.chr.toLowerCase().includes(q)) : covList;
+  let filtered = covList.filter(d => d.total_reads >= minReadsThreshold);
+  if (q) filtered = filtered.filter(d => d.chr.toLowerCase().includes(q));
   buildList(filtered);
   if (activeChr) setActive(activeChr);
 }
