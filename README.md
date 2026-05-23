@@ -1,106 +1,123 @@
-# 🧬 Alignment Viewer — n1
+# 🧬 Alignment Viewer
 
-BAMファイルのカバレッジ・アライメントを視覚的に探索するWebビューア。
-
----
-
-## 画面の見方
-
-```
-┌─────────────────────────────────────────────┐
-│ ヘッダー: サンプル名・マッピング数・総リード数 │
-├─────────────────────────────────────────────┤
-│ 📊 ゲノム全体俯瞰                           │
-│    全scaffold を長さ順に表示。               │
-│    色が青→橙になるほどリードが多い。         │
-│    ← バーをクリックすると下に詳細が出る      │
-├─────────────────────────────────────────────┤
-│ 📈 カバレッジ詳細                           │
-│    選んだ scaffold の100kb ごとのリード数。  │
-│    ← バーをクリックすると IGV に飛ぶ         │
-├─────────────────────────────────────────────┤
-│ 🔬 IGV（リードの生データ）                  │
-│    実際のリードの並びをbp単位で確認できる。  │
-│    ローカルサーバ起動時のみ表示される。      │
-└─────────────────────────────────────────────┘
-```
-
-> パネルの境界線をドラッグすると上下に広げられます。
+BAMファイルのアライメントをブラウザで視覚的に探索するツールです。  
+左サイドバーでscaffoldを選ぶとリードが多い場所に自動でジャンプします。
 
 ---
 
-## 起動方法
+## 必要なもの
 
-### 1. 必要なファイルを確認する
+| ツール | 確認コマンド | インストール（Mac） |
+|--------|-------------|-------------------|
+| Python 3 | `python3 --version` | 標準で入っている |
+| samtools 1.x | `samtools --version` | `brew install samtools` |
+| htslib | `bgzip --version` | `brew install htslib` |
 
-以下のファイルがこのフォルダに揃っていること：
+> **Homebrew がない場合:**  
+> `curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh | bash`
 
-| ファイル | 説明 |
-|----------|------|
-| `n1_sorted.bam` | アライメント結果（BAM形式） |
-| `n1_sorted.bam.bai` | BAMのインデックス |
-| `reference.fa` | リファレンスゲノム |
-| `reference.fa.fai` | リファレンスのインデックス |
+---
 
-> これらは容量が大きいため GitHub には上がっていません。  
-> Google Drive から手動でコピーしてください。
+## クイックスタート
 
-### 2. サーバを起動する
+### 1. データファイルを配置する
 
-ターミナルで：
+このフォルダに以下のファイルを置く（GitHubには含まれていません）：
+
+```
+sample.bam        ← ソート済みBAMファイル
+sample.bam.bai    ← BAMインデックス（samtools index で作成）
+reference.fa      ← リファレンスゲノム（FASTA）
+```
+
+> BAMがソートされていない場合:
+> ```bash
+> samtools sort input.bam -o sample.bam
+> samtools index sample.bam
+> ```
+
+### 2. セットアップを実行する
 
 ```bash
-bash scripts/serve-viewer.sh
+bash scripts/setup_viewer.sh sample.bam reference.fa
 ```
 
-自動でブラウザが開きます → `http://localhost:8765/index.html`
+初回は数分かかります（リファレンス抽出のため）。
 
-### 3. 終了する
+### 3. サーバを起動してブラウザで開く
 
-ターミナルで `Ctrl + C` を押す。
+```bash
+python3 scripts/range_server.py
+```
+
+ブラウザで → **http://localhost:8765/igv.html**
+
+終了するには `Ctrl + C`。
 
 ---
 
-## 基本的な使い方
+## 使い方
 
-### scaffold を選んで詳細を見る
+```
+┌──────────────────────────────────────────────┐
+│ 🔬 IGV Viewer                                │
+├──────────────┬───────────────────────────────┤
+│ 🔍 scaffold  │  Start:[    ] End:[    ]       │
+│  を検索      │  [移動] [ピークへ] [＋] [－]  │
+│──────────────│───────────────────────────────│
+│ scaffold_3   │                               │
+│ 76,439 reads │      リード表示エリア          │
+│ ████████░░   │   （クリックで選択した場所へ） │
+│ scaffold_2   │                               │
+│ 36,571 reads │                               │
+│ ████░░░░░░   │                               │
+└──────────────┴───────────────────────────────┘
+```
 
-1. 上のグラフ（ゲノム全体俯瞰）のバーをクリック
-2. 真ん中のグラフにそのscaffoldのカバレッジが表示される
-3. 真ん中のグラフのバーをクリックするとIGVがその場所に飛ぶ
+| 操作 | 方法 |
+|------|------|
+| scaffold を選ぶ | 左サイドバーをクリック |
+| リード集中位置へ移動 | 「ピークへ」ボタン |
+| 任意の座標へ移動 | Start/End を入力して「移動」 |
+| 拡大・縮小 | ＋／－ボタン、またはマウスホイール |
+| scaffold を検索 | 左上の検索ボックスに名前を入力 |
 
-### IGV で直接場所を指定する
+---
 
-1. 画面下部の「Scaffold:」プルダウンで scaffold を選ぶ
-2. Start・End に塩基位置（数字）を入力
-3. 「移動」ボタンを押す
+## 別のサンプルに切り替えるとき
 
-### リセットする
-
-「リセット」ボタンを押すと、最もリードが多い scaffold の先頭に戻る。
+```bash
+bash scripts/setup_viewer.sh new_sample.bam new_reference.fa
+python3 scripts/range_server.py
+```
 
 ---
 
 ## ファイル構成
 
 ```
-index.html                 ← メインビューア
+igv.html                    ← メインビューア
 output/
-  all_scaffolds.json       ← scaffold 一覧（28,176件）
-  coverage_bins.json       ← カバレッジデータ（1,060 scaffolds）
+  all_scaffolds.json        ← scaffold一覧
+  coverage_bins.json        ← カバレッジデータ
+  peak_loci.json            ← scaffold別ピーク位置
+reads_ref60.fa              ← 抽出済みリファレンス（自動生成）
+reads_ref60.fa.fai          ← そのインデックス
 scripts/
-  serve-viewer.sh          ← サーバ起動スクリプト
-  hourly-log.sh            ← 定期ログ取得
-  install-cron.sh          ← cron 設定
+  setup_viewer.sh           ← セットアップ（新データ時に実行）
+  make_jsons.py             ← JSON生成スクリプト
+  range_server.py           ← HTTPサーバ（IGV用）
+  serve-viewer.sh           ← 旧サーバ（非推奨）
 ```
 
 ---
 
 ## トラブルシューティング
 
-| 症状 | 原因 | 対処 |
-|------|------|------|
-| IGV が表示されない | サーバが停止している | `bash scripts/serve-viewer.sh` を再実行 |
-| グラフが出ない | JSONファイルが見つからない | `output/` フォルダを確認 |
-| リードが表示されない | BAMファイルがない | `n1_sorted.bam` をこのフォルダに配置 |
-| ブラウザが開かない | ポート8765が使用中 | スクリプトが自動で解放するので再実行 |
+| 症状 | 対処 |
+|------|------|
+| `samtools: command not found` | `brew install samtools` を実行 |
+| `bgzip: command not found` | `brew install htslib` を実行 |
+| リードが表示されない | BAMがソート・インデックス済みか確認 |
+| ページが開かない | `python3 scripts/range_server.py` が起動しているか確認 |
+| ジャンプしない | `setup_viewer.sh` を再実行 |
