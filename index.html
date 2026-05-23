@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Alignment Viewer — n1</title>
+<script src="https://cdn.jsdelivr.net/npm/igv@3.0.2/dist/igv.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist@2.35.2/plotly.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0d0f1a;color:#e2e8f0}
+#header{height:48px;background:#131625;border-bottom:1px solid #1e2235;display:flex;align-items:center;padding:0 14px;gap:10px;flex-shrink:0;flex-wrap:wrap}
+#header h1{font-size:.95rem;font-weight:700;color:#818cf8;white-space:nowrap}
+.hbadge{font-size:.72rem;background:#1e2235;border:1px solid #2d3455;color:#94a3b8;border-radius:4px;padding:2px 8px;white-space:nowrap}
+.hbadge b{color:#a5b4fc}
+#mode-btn{margin-left:auto;font-size:.72rem;background:#1e2235;border:1px solid #4f46e5;color:#818cf8;border-radius:4px;padding:3px 10px;cursor:pointer;white-space:nowrap}
+#mode-btn:hover{background:#2d3455}
+#loading-overlay{position:fixed;inset:0;background:#0d0f1aee;z-index:999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px}
+.spinner{width:36px;height:36px;border:3px solid #2d3455;border-top-color:#818cf8;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#loading-msg{color:#94a3b8;font-size:.85rem}
+#app{display:flex;flex-direction:column;height:calc(100vh - 48px)}
+#row-overview{height:220px;flex-shrink:0;border-bottom:1px solid #1e2235;display:flex;flex-direction:column}
+.row-title{padding:4px 14px;font-size:.72rem;color:#64748b;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.row-title b{color:#94a3b8}
+#overview-plot{flex:1;min-height:0}
+#row-detail{height:180px;flex-shrink:0;border-bottom:1px solid #1e2235;display:flex;flex-direction:column}
+#detail-plot{flex:1;min-height:0}
+#row-igv{flex:1;min-height:0;display:flex;flex-direction:column}
+#igv-toolbar{padding:4px 14px;background:#131625;border-bottom:1px solid #1e2235;display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap}
+#igv-toolbar label{font-size:.72rem;color:#64748b;white-space:nowrap}
+#igv-toolbar select,#igv-toolbar input{background:#1e2235;border:1px solid #2d3455;color:#e2e8f0;border-radius:4px;padding:3px 7px;font-size:.78rem;outline:none}
+#igv-toolbar select:focus,#igv-toolbar input:focus{border-color:#6366f1}
+#igv-toolbar button{background:#4f46e5;color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:.78rem;cursor:pointer}
+#igv-toolbar button:hover{background:#6366f1}
+#igv-toolbar button.sec{background:#1e2235;border:1px solid #2d3455;color:#94a3b8}
+#igv-toolbar button.sec:hover{background:#2d3455;color:#e2e8f0}
+#igv-container{flex:1;min-height:0;background:#fff;overflow:auto}
+#igv-notice{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center}
+#igv-notice h2{color:#818cf8;font-size:1rem}
+#igv-notice p{color:#64748b;font-size:.82rem;line-height:1.7;max-width:500px}
+#igv-notice code{background:#1e2235;border:1px solid #2d3455;border-radius:4px;padding:2px 6px;color:#a5b4fc;font-size:.8rem}
+#chr-info{font-size:.72rem;color:#818cf8;white-space:nowrap}
+.resize-handle{height:4px;background:#1e2235;cursor:ns-resize;flex-shrink:0;transition:background .15s}
+.resize-handle:hover{background:#4f46e5}
+</style>
+</head>
+<body>
+
+<div id="loading-overlay">
+  <div class="spinner"></div>
+  <div id="loading-msg">データを読み込んでいます…</div>
+</div>
+
+<div id="header">
+  <h1>🧬 Alignment Viewer</h1>
+  <span class="hbadge">BAM: <b>n1_sorted.bam</b></span>
+  <span class="hbadge">Ref: <b>reference.fa</b></span>
+  <span class="hbadge" id="hbadge-mapped">—</span>
+  <span class="hbadge" id="hbadge-reads">—</span>
+  <button id="mode-btn" onclick="toggleMode()">🖥 ローカルサーバモード切替</button>
+</div>
+
+<div id="app">
+  <div id="row-overview">
+    <div class="row-title">
+      📊 <b>ゲノム全体俯瞰</b> — scaffoldを長さ順に並べリード密度で色付け。クリックで詳細へ。
+    </div>
+    <div id="overview-plot"></div>
+  </div>
+
+  <div class="resize-handle" id="rh1"></div>
+
+  <div id="row-detail">
+    <div class="row-title" id="detail-title">
+      📈 <b>カバレッジ詳細</b> — 上のグラフのscaffoldをクリックすると100kbビンのカバレッジを表示
+    </div>
+    <div id="detail-plot"></div>
+  </div>
+
+  <div class="resize-handle" id="rh2"></div>
+
+  <div id="row-igv">
+    <div id="igv-toolbar">
+      <label>Scaffold:</label>
+      <select id="chr-select" style="max-width:260px"></select>
+      <label>Start:</label>
+      <input type="number" id="pos-start" placeholder="1" style="width:80px">
+      <label>End:</label>
+      <input type="number" id="pos-end" placeholder="end" style="width:80px">
+      <button onclick="igvGo()">移動</button>
+      <button class="sec" onclick="igvReset()">リセット</button>
+      <span id="chr-info"></span>
+    </div>
+    <!-- IGV表示エリア（ローカルモード時） -->
+    <div id="igv-container" style="display:none"></div>
+    <!-- オフライン案内（GitHub Pages時） -->
+    <div id="igv-notice">
+      <h2>🔬 IGV リードビューア</h2>
+      <p>
+        IGVでBAMファイルを表示するには<b>ローカルサーバ</b>が必要です。<br>
+        以下のコマンドを実行してからページを再読み込みしてください：
+      </p>
+      <p><code>bash scripts/serve-viewer.sh</code></p>
+      <p style="color:#475569">
+        ローカルサーバ起動後、右上の <b>「ローカルサーバモード切替」</b> ボタンを押すか、<br>
+        <code>http://localhost:8765/index.html</code> でアクセスしてください。
+      </p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ローカルサーバのベースURL
+const LOCAL_BASE = 'http://localhost:8765';
+// GitHub Pages 等の静的配信ではJSONは相対パスで取得
+const IS_LOCAL = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+
+let allScaffolds = [];
+let covBins = [];
+let covMap = {};
+let igvBrowser = null;
+let igvInitialized = false;
+
+// モード切替ボタン
+function toggleMode() {
+  if (IS_LOCAL) return; // ローカルではリロード不要
+  const url = new URL(location.href);
+  if (url.hostname !== 'localhost') {
+    alert('ローカルサーバを起動後、http://localhost:8765/index.html でアクセスしてください。');
+  }
+}
+
+function setMsg(m) { document.getElementById('loading-msg').textContent = m; }
+
+async function loadData() {
+  // 相対パスでJSONを取得（ローカルでも GitHub Pages でも動作）
+  const base = IS_LOCAL ? LOCAL_BASE : '.';
+  setMsg('coverage_bins.json を読み込み中…');
+  const [r1, r2] = await Promise.all([
+    fetch(base + '/output/coverage_bins.json').then(r => r.json()),
+    fetch(base + '/output/all_scaffolds.json').then(r => r.json()),
+  ]);
+  covBins = r1;
+  allScaffolds = r2;
+  covBins.forEach(d => { covMap[d.chr] = d; });
+}
+
+function buildOverview() {
+  const sorted = [...allScaffolds].sort((a,b) => b.len - a.len);
+  const N = sorted.length;
+  const x=[],y=[],color=[],text=[],cdata=[];
+  sorted.forEach((s,i) => {
+    const dens = s.len > 0 ? s.reads / (s.len / 1e6) : 0;
+    x.push(i); y.push(s.len/1e6); color.push(dens);
+    text.push(s.chr+'<br>長さ: '+(s.len/1e6).toFixed(1)+' Mb<br>リード: '+s.reads.toLocaleString()+'<br>密度: '+dens.toFixed(1)+' reads/Mb');
+    cdata.push(s.chr);
+  });
+  const maxColor = Math.max(...color.filter(v=>v>0))*0.8;
+  const trace = {
+    type:'bar',x,y,
+    marker:{
+      color,
+      colorscale:[[0,'#1a1d2e'],[0.001,'#1e3a5f'],[0.05,'#1d4ed8'],[0.2,'#06b6d4'],[0.5,'#22d3ee'],[1,'#f59e0b']],
+      cmin:0,cmax:maxColor,showscale:true,
+      colorbar:{title:{text:'reads/Mb',font:{color:'#64748b',size:10}},tickfont:{color:'#64748b',size:9},len:0.8,thickness:10,x:1.01},
+    },
+    text,hovertemplate:'%{text}<extra></extra>',customdata:cdata,
+  };
+  const layout = {
+    paper_bgcolor:'#0d0f1a',plot_bgcolor:'#131625',
+    margin:{l:50,r:70,t:4,b:30},
+    xaxis:{title:{text:'← 長い順に '+N.toLocaleString()+' scaffolds →',font:{color:'#475569',size:10}},showgrid:false,zeroline:false,tickfont:{color:'#475569',size:9},range:[-50,N+50]},
+    yaxis:{title:{text:'長さ (Mb)',font:{color:'#475569',size:10}},showgrid:true,gridcolor:'#1e2235',zeroline:false,tickfont:{color:'#475569',size:9}},
+    showlegend:false,bargap:0,
+  };
+  Plotly.newPlot('overview-plot',[trace],layout,{responsive:true,displayModeBar:false});
+  document.getElementById('overview-plot').on('plotly_click',data=>{
+    selectChr(data.points[0].customdata);
+  });
+}
+
+function buildDetail(chr) {
+  const d = covMap[chr];
+  if (!d) return;
+  const bins = d.bins;
+  const maxVal = Math.max(...bins,1);
+  const x = bins.map((_,i)=>((i+0.5)*100000)/1e6);
+  const trace = {
+    type:'bar',x,y:bins,
+    marker:{color:bins.map(v=>{
+      if(v===0) return '#1a1d2e';
+      const r=v/maxVal;
+      if(r<0.1) return '#1e3a5f';
+      if(r<0.3) return '#1d4ed8';
+      if(r<0.6) return '#06b6d4';
+      if(r<0.85) return '#22d3ee';
+      return '#f59e0b';
+    })},
+    text:bins.map((v,i)=>chr+'<br>'+(i*100000+1).toLocaleString()+'–'+((i+1)*100000).toLocaleString()+' bp<br>'+v.toLocaleString()+' reads'),
+    hovertemplate:'%{text}<extra></extra>',
+    customdata:bins.map((_,i)=>({chr,start:i*100000+1,end:Math.min((i+1)*100000,d.len)})),
+  };
+  const covPct = d.num_bins>0?((d.covered_bins/d.num_bins)*100).toFixed(1):0;
+  document.getElementById('detail-title').innerHTML =
+    '📈 <b>'+chr+'</b> &nbsp;|&nbsp; '+(d.len/1e6).toFixed(1)+' Mb &nbsp;|&nbsp; '+
+    '<span style="color:#4ade80">'+d.total_reads.toLocaleString()+' reads</span> &nbsp;|&nbsp; '+
+    'カバレッジ: <span style="color:#22d3ee">'+covPct+'%</span>'+(IS_LOCAL?' &nbsp;— バーをクリックでIGV表示':'');
+  const layout = {
+    paper_bgcolor:'#0d0f1a',plot_bgcolor:'#131625',
+    margin:{l:50,r:20,t:4,b:30},
+    xaxis:{title:{text:'位置 (Mb)',font:{color:'#475569',size:10}},showgrid:false,zeroline:false,tickfont:{color:'#475569',size:9}},
+    yaxis:{title:{text:'reads',font:{color:'#475569',size:10}},showgrid:true,gridcolor:'#1e2235',zeroline:false,tickfont:{color:'#475569',size:9}},
+    showlegend:false,bargap:0,
+  };
+  Plotly.newPlot('detail-plot',[trace],layout,{responsive:true,displayModeBar:false});
+  if (IS_LOCAL) {
+    document.getElementById('detail-plot').on('plotly_click',data=>{
+      const cd=data.points[0].customdata;
+      igvJumpTo(cd.chr,cd.start,cd.end);
+    });
+  }
+}
+
+function selectChr(chr) {
+  document.getElementById('chr-select').value=chr;
+  buildDetail(chr);
+  if (IS_LOCAL) {
+    const d=covMap[chr]||{};
+    igvJumpTo(chr,1,Math.min(2000000,d.len||2000000));
+  }
+}
+
+async function initIGV() {
+  if (!IS_LOCAL) return;
+  document.getElementById('igv-notice').style.display='none';
+  document.getElementById('igv-container').style.display='block';
+  igvBrowser = await igv.createBrowser(document.getElementById('igv-container'),{
+    showNavigation:true,showRuler:true,showCenterGuide:true,showCursorTrackingGuide:true,
+    genome:{id:'shohei-ref',name:'reference.fa',fastaURL:LOCAL_BASE+'/reference.fa',indexURL:LOCAL_BASE+'/reference.fa.fai'},
+    tracks:[{type:'alignment',format:'bam',url:LOCAL_BASE+'/n1_sorted.bam',indexURL:LOCAL_BASE+'/n1_sorted.bam.bai',
+      name:'n1 Alignments',colorBy:'strand',viewAsPairs:false,showSoftClips:true,height:250}],
+    locus:'HiC_scaffold_3:1-2000000',
+  });
+  igvInitialized=true;
+}
+
+function igvJumpTo(chr,start,end) {
+  if (!igvBrowser) return;
+  igvBrowser.search(chr+':'+start+'-'+end);
+  const d=covMap[chr];
+  document.getElementById('chr-info').textContent=
+    chr+' | '+start.toLocaleString()+'–'+end.toLocaleString()+' bp'+(d?' | '+d.total_reads.toLocaleString()+' reads':'');
+}
+
+function igvGo() {
+  if (!IS_LOCAL) return;
+  const chr=document.getElementById('chr-select').value;
+  if(!chr) return;
+  const d=covMap[chr]||{};
+  const s=parseInt(document.getElementById('pos-start').value)||1;
+  const e=parseInt(document.getElementById('pos-end').value)||Math.min(2000000,d.len);
+  igvJumpTo(chr,s,e); buildDetail(chr);
+}
+
+function igvReset() {
+  if (!IS_LOCAL) return;
+  const top=covBins[0]; if(!top) return;
+  selectChr(top.chr);
+}
+
+function buildSelect() {
+  const sel=document.getElementById('chr-select');
+  covBins.forEach(d=>{
+    const o=document.createElement('option');
+    o.value=d.chr;
+    o.textContent=d.chr+'  ('+d.total_reads.toLocaleString()+' reads, '+(d.len/1e6).toFixed(1)+' Mb)';
+    sel.appendChild(o);
+  });
+  sel.addEventListener('change',()=>selectChr(sel.value));
+}
+
+function initResize(hid,topId,botId,minT,minB) {
+  const h=document.getElementById(hid),t=document.getElementById(topId);
+  let drag=false,sy=0,sh=0;
+  h.addEventListener('mousedown',e=>{drag=true;sy=e.clientY;sh=t.offsetHeight;document.body.style.cursor='ns-resize';e.preventDefault()});
+  document.addEventListener('mousemove',e=>{
+    if(!drag) return;
+    const nH=Math.max(minT||80,sh+(e.clientY-sy));
+    t.style.height=nH+'px';t.style.flex='none';
+    const plot=t.querySelector('div[id$="-plot"]');
+    if(plot) Plotly.Plots.resize(plot);
+  });
+  document.addEventListener('mouseup',()=>{if(drag){drag=false;document.body.style.cursor=''}});
+}
+
+function updateBadges() {
+  const total=allScaffolds.length;
+  const mapped=covBins.length;
+  const totalReads=covBins.reduce((s,d)=>s+d.total_reads,0);
+  document.getElementById('hbadge-mapped').innerHTML='マッピング: <b>'+mapped.toLocaleString()+' / '+total.toLocaleString()+'</b> scaffolds';
+  document.getElementById('hbadge-reads').innerHTML='総リード: <b>'+totalReads.toLocaleString()+'</b>';
+}
+
+(async()=>{
+  try {
+    await loadData();
+    updateBadges(); buildSelect();
+    if (IS_LOCAL) {
+      setMsg('IGVを初期化中…');
+      await initIGV();
+    }
+    setMsg('グラフを描画中…');
+    buildOverview();
+    const top=covBins[0];
+    if(top){ selectChr(top.chr); document.getElementById('chr-select').value=top.chr; }
+    document.getElementById('loading-overlay').style.display='none';
+    initResize('rh1','row-overview','row-detail',60);
+    initResize('rh2','row-detail','row-igv',60,100);
+  } catch(e) {
+    setMsg('エラー: '+e.message);
+    console.error(e);
+  }
+})();
+</script>
+</body>
+</html>
