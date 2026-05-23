@@ -1,90 +1,98 @@
 # 🧬 Alignment Viewer
 
-BAMファイルのアライメントをブラウザで視覚的に探索するツールです。  
-左サイドバーでscaffoldを選ぶとリードが多い場所に自動でジャンプします。
+A browser-based BAM alignment viewer built on IGV.js.  
+The left sidebar lists scaffolds sorted by read count. Click a scaffold to jump to the read-dense region automatically.
 
 ---
 
-## 必要なもの
+## Requirements
 
-| ツール | 確認コマンド | インストール（Mac） |
-|--------|-------------|-------------------|
-| Python 3 | `python3 --version` | 標準で入っている |
+| Tool | Check | Install (Mac) |
+|------|-------|---------------|
+| Python 3 | `python3 --version` | Built-in |
 | samtools 1.x | `samtools --version` | `brew install samtools` |
-| htslib | `bgzip --version` | `brew install htslib` |
+| htslib (bgzip) | `bgzip --version` | `brew install htslib` |
 
-> **Homebrew がない場合:**  
+> **No Homebrew?**  
 > `curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh | bash`
 
 ---
 
-## クイックスタート
+## Quick Start
 
-### 1. データファイルを配置する
+### 1. Place your data files
 
-このフォルダに以下のファイルを置く（GitHubには含まれていません）：
+Put the following files in this folder (not included in the repository):
 
 ```
-sample.bam        ← ソート済みBAMファイル
-sample.bam.bai    ← BAMインデックス（samtools index で作成）
-reference.fa      ← リファレンスゲノム（FASTA）
+sample.bam        ← sorted BAM file
+sample.bam.bai    ← BAM index (created with: samtools index sample.bam)
+reference.fa      ← reference genome (FASTA)
 ```
 
-> BAMがソートされていない場合:
+> If your BAM is not sorted:
 > ```bash
 > samtools sort input.bam -o sample.bam
 > samtools index sample.bam
 > ```
 
-### 2. セットアップを実行する
+### 2. Run setup
 
 ```bash
 bash scripts/setup_viewer.sh sample.bam reference.fa
 ```
 
-初回は数分かかります（リファレンス抽出のため）。
+Takes a few minutes on first run (extracting reference sequences).
 
-### 3. サーバを起動してブラウザで開く
+### 3. Start the server and open the browser
 
 ```bash
 python3 scripts/range_server.py
 ```
 
-ブラウザで → **http://localhost:8765/igv.html**
+Then open → **http://localhost:8765/igv.html**
 
-終了するには `Ctrl + C`。
+Press `Ctrl + C` to stop the server.
 
 ---
 
-## 使い方
+## Using the App Launcher
+
+**Double-click** `AlignmentViewer.command` (or `AlignmentViewer.app`) to start the server and open the browser automatically.
+
+**To use new data**, drag & drop your `.bam` file (and optionally your reference `.fa`) onto `AlignmentViewer.app`. The setup runs automatically in a Terminal window.
+
+---
+
+## Interface
 
 ```
 ┌──────────────────────────────────────────────┐
 │ 🔬 IGV Viewer                                │
 ├──────────────┬───────────────────────────────┤
-│ 🔍 scaffold  │  Start:[    ] End:[    ]       │
-│  を検索      │  [移動] [ピークへ] [＋] [－]  │
+│ 🔍 Search    │  Start:[    ] End:[    ]       │
+│  scaffold    │  [Go] [Peak] [+] [−]          │
 │──────────────│───────────────────────────────│
 │ scaffold_3   │                               │
-│ 76,439 reads │      リード表示エリア          │
-│ ████████░░   │   （クリックで選択した場所へ） │
+│ 76,439 reads │       Alignment display       │
+│ ████████░░   │   (click sidebar to navigate) │
 │ scaffold_2   │                               │
 │ 36,571 reads │                               │
 │ ████░░░░░░   │                               │
 └──────────────┴───────────────────────────────┘
 ```
 
-| 操作 | 方法 |
-|------|------|
-| scaffold を選ぶ | 左サイドバーをクリック |
-| リード集中位置へ移動 | 「ピークへ」ボタン |
-| 任意の座標へ移動 | Start/End を入力して「移動」 |
-| 拡大・縮小 | ＋／－ボタン、またはマウスホイール |
-| scaffold を検索 | 左上の検索ボックスに名前を入力 |
+| Action | How |
+|--------|-----|
+| Select scaffold | Click in the left sidebar |
+| Jump to read-dense position | "Peak" button |
+| Navigate to coordinates | Enter Start/End then click "Go" |
+| Zoom in / out | +/− buttons or mouse wheel |
+| Search scaffold | Type in the search box (top-left) |
 
 ---
 
-## 別のサンプルに切り替えるとき
+## Switching to a different dataset
 
 ```bash
 bash scripts/setup_viewer.sh new_sample.bam new_reference.fa
@@ -93,31 +101,33 @@ python3 scripts/range_server.py
 
 ---
 
-## ファイル構成
+## File layout
 
 ```
-igv.html                    ← メインビューア
+igv.html                    ← main viewer
 output/
-  all_scaffolds.json        ← scaffold一覧
-  coverage_bins.json        ← カバレッジデータ
-  peak_loci.json            ← scaffold別ピーク位置
-reads_ref60.fa              ← 抽出済みリファレンス（自動生成）
-reads_ref60.fa.fai          ← そのインデックス
+  all_scaffolds.json        ← scaffold list with read counts
+  coverage_bins.json        ← 100 kb bin coverage data
+  peak_loci.json            ← peak read positions per scaffold
+reads_ref60.fa              ← extracted reference (auto-generated)
+reads_ref60.fa.fai          ← its index
 scripts/
-  setup_viewer.sh           ← セットアップ（新データ時に実行）
-  make_jsons.py             ← JSON生成スクリプト
-  range_server.py           ← HTTPサーバ（IGV用）
-  serve-viewer.sh           ← 旧サーバ（非推奨）
+  setup_viewer.sh           ← setup for new data
+  make_jsons.py             ← generates JSON files
+  range_server.py           ← HTTP server (Range-request capable)
+AlignmentViewer.command     ← double-click launcher (Terminal)
+AlignmentViewer.app         ← double-click / drag & drop launcher
 ```
 
 ---
 
-## トラブルシューティング
+## Troubleshooting
 
-| 症状 | 対処 |
-|------|------|
-| `samtools: command not found` | `brew install samtools` を実行 |
-| `bgzip: command not found` | `brew install htslib` を実行 |
-| リードが表示されない | BAMがソート・インデックス済みか確認 |
-| ページが開かない | `python3 scripts/range_server.py` が起動しているか確認 |
-| ジャンプしない | `setup_viewer.sh` を再実行 |
+| Symptom | Fix |
+|---------|-----|
+| `samtools: command not found` | `brew install samtools` |
+| `bgzip: command not found` | `brew install htslib` |
+| No reads displayed | Confirm BAM is sorted and indexed |
+| Page won't open | Make sure `python3 scripts/range_server.py` is running |
+| Jump doesn't work | Re-run `setup_viewer.sh` |
+| App won't open | Right-click → Open, or run: `xattr -cr AlignmentViewer.app` |

@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 """
-Range-request対応HTTPサーバ
-IGV.jsでBAM/FASTAを正しく配信するために必要
+HTTP server with Range request support.
+Required for IGV.js to load BAM and FASTA files correctly (HTTP 206).
 """
 import os, sys, mimetypes, urllib.parse
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 PORT = 8765
 ROOT = os.path.dirname(os.path.abspath(__file__))
-# scripts/ の一つ上がデータルート
+# One level up from scripts/ is the data root
 ROOT = os.path.dirname(ROOT)
 
 class RangeHandler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         self.send_response(200)
-        self._headers()
+        self._cors_headers()
         self.end_headers()
 
     def do_HEAD(self):
@@ -24,18 +24,18 @@ class RangeHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self._serve(send_body=True)
 
-    def _headers(self):
+    def _cors_headers(self):
         self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Headers', 'Range')
         self.send_header('Access-Control-Expose-Headers',
                          'Content-Range, Content-Length, Accept-Ranges')
 
     def _serve(self, send_body=True):
-        # URLデコード・クエリ除去
+        # Decode URL and strip query string
         path = urllib.parse.unquote(self.path.split('?')[0])
         filepath = os.path.normpath(os.path.join(ROOT, path.lstrip('/')))
 
-        # ディレクトリトラバーサル防止
+        # Prevent directory traversal
         if not filepath.startswith(ROOT):
             self.send_error(403); return
 
@@ -57,7 +57,7 @@ class RangeHandler(BaseHTTPRequestHandler):
                 length = end - start + 1
 
                 self.send_response(206)
-                self._headers()
+                self._cors_headers()
                 self.send_header('Content-Type', ctype)
                 self.send_header('Content-Length', str(length))
                 self.send_header('Content-Range',
@@ -70,9 +70,9 @@ class RangeHandler(BaseHTTPRequestHandler):
             except Exception as ex:
                 self.send_error(416, str(ex))
         else:
-            # 通常リクエスト → 200
+            # Full file → 200
             self.send_response(200)
-            self._headers()
+            self._cors_headers()
             self.send_header('Content-Type', ctype)
             self.send_header('Content-Length', str(file_size))
             self.send_header('Accept-Ranges', 'bytes')
@@ -97,16 +97,15 @@ class RangeHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == '__main__':
-    # ポートが使用中なら終了して再起動
     import socket
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         if s.connect_ex(('127.0.0.1', PORT)) == 0:
-            print(f'⚠ ポート {PORT} が使用中です。既存プロセスを停止してから再実行してください。')
+            print(f'⚠ Port {PORT} is already in use. Stop the existing process first.')
             sys.exit(1)
 
     print(f'======================================')
     print(f'  Alignment Viewer (Range-capable)')
     print(f'  http://localhost:{PORT}/igv.html')
-    print(f'  Ctrl+C で終了')
+    print(f'  Ctrl+C to stop')
     print(f'======================================')
     HTTPServer(('127.0.0.1', PORT), RangeHandler).serve_forever()

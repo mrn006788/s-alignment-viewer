@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <title>IGV Viewer — n1</title>
@@ -8,16 +8,16 @@
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0d0f1a;color:#e2e8f0;overflow:hidden}
 
-/* ヘッダー */
+/* Header */
 #header{height:44px;background:#131625;border-bottom:1px solid #1e2235;display:flex;align-items:center;padding:0 14px;gap:8px;flex-shrink:0}
 #header h1{font-size:.9rem;font-weight:700;color:#818cf8}
 .badge{font-size:.7rem;background:#1e2235;border:1px solid #2d3455;color:#94a3b8;border-radius:4px;padding:2px 7px}
 .badge b{color:#a5b4fc}
 
-/* レイアウト */
+/* Layout */
 #body{display:flex;height:calc(100vh - 44px)}
 
-/* サイドバー */
+/* Sidebar */
 #sidebar{width:220px;flex-shrink:0;background:#0d0f1a;border-right:1px solid #1e2235;display:flex;flex-direction:column;overflow:hidden}
 #sidebar-header{padding:8px 10px;border-bottom:1px solid #1e2235;flex-shrink:0}
 #sidebar-header input{width:100%;background:#1e2235;border:1px solid #2d3455;color:#e2e8f0;border-radius:4px;padding:4px 8px;font-size:.75rem;outline:none}
@@ -37,7 +37,7 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sa
 .sc-bar{flex:1;height:3px;background:#1e2235;border-radius:2px;overflow:hidden}
 .sc-bar-fill{height:100%;background:#4f46e5;border-radius:2px}
 
-/* メインエリア */
+/* Main area */
 #main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
 #toolbar{padding:5px 12px;background:#131625;border-bottom:1px solid #1e2235;display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex-shrink:0}
 #toolbar label{font-size:.72rem;color:#64748b;white-space:nowrap}
@@ -62,27 +62,27 @@ html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sa
 
 <div id="body">
 
-  <!-- サイドバー: scaffold一覧 -->
+  <!-- Sidebar: scaffold list -->
   <div id="sidebar">
     <div id="sidebar-header">
-      <input type="text" id="search" placeholder="🔍 scaffold を検索…" oninput="filterList()">
+      <input type="text" id="search" placeholder="🔍 Search scaffold…" oninput="filterList()">
     </div>
     <div id="scaffold-list"></div>
   </div>
 
-  <!-- メイン: IGV -->
+  <!-- Main: IGV -->
   <div id="main">
     <div id="toolbar">
       <label>Start:</label>
-      <input type="number" id="pos-s" placeholder="例: 8496000">
+      <input type="number" id="pos-s" placeholder="e.g. 8496000">
       <label>End:</label>
-      <input type="number" id="pos-e" placeholder="例: 8497200">
-      <button onclick="jump()">移動</button>
-      <button class="sec" onclick="jumpToPeak()">ピークへ</button>
-      <button class="sec" onclick="zoomIn()">＋</button>
-      <button class="sec" onclick="zoomOut()">－</button>
+      <input type="number" id="pos-e" placeholder="e.g. 8497200">
+      <button onclick="jump()">Go</button>
+      <button class="sec" onclick="jumpToPeak()">Peak</button>
+      <button class="sec" onclick="zoomIn()">+</button>
+      <button class="sec" onclick="zoomOut()">−</button>
     </div>
-    <div id="status">読み込み中…</div>
+    <div id="status">Loading…</div>
     <div id="igv-wrap"></div>
   </div>
 
@@ -106,9 +106,9 @@ async function init() {
     covList.forEach(d => { covMap[d.chr] = d; });
     maxReads = covList[0]?.total_reads || 1;
     buildList(covList);
-    setStatus('IGV初期化中…');
+    setStatus('Initializing IGV…');
   } catch(e) {
-    setStatus('⚠ JSONロード失敗: サーバが起動しているか確認してください');
+    setStatus('⚠ Failed to load JSON. Is the server running?');
     return;
   }
 
@@ -142,16 +142,16 @@ async function init() {
       const r = e && e[0];
       if (r) {
         const loc = r.chr + ':' + r.start.toLocaleString() + '–' + r.end.toLocaleString();
-        setStatus(loc + '  （幅: ' + (r.end - r.start).toLocaleString() + ' bp）');
+        setStatus(loc + '  (width: ' + (r.end - r.start).toLocaleString() + ' bp)');
         document.getElementById('badge-loc').textContent = loc;
         if (r.chr !== activeChr) setActive(r.chr);
       }
     });
 
     if (first) setActive(first.chr);
-    setStatus('✅ 完了 — ' + initLocus);
+    setStatus('✅ Ready — ' + initLocus);
   } catch(e) {
-    setStatus('⚠ IGVエラー: ' + e.message);
+    setStatus('⚠ IGV error: ' + e.message);
     console.error(e);
   }
 }

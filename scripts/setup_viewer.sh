@@ -1,27 +1,27 @@
 #!/usr/bin/env bash
-# setup_viewer.sh — 新しいBAM/リファレンスでビューアをセットアップする
+# setup_viewer.sh — Set up the viewer for a new BAM / reference pair
 #
-# 使い方:
-#   bash scripts/setup_viewer.sh <BAMファイル> <FASTAファイル>
+# Usage:
+#   bash scripts/setup_viewer.sh <BAM file> <FASTA file>
 #
-# 例:
+# Example:
 #   bash scripts/setup_viewer.sh n2_sorted.bam reference.fa
 
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT_DIR"
 
-# ─── 依存ツールチェック ─────────────────────────────────────────
-echo "依存ツールを確認中..."
+# ─── Dependency check ──────────────────────────────────────────────
+echo "Checking dependencies..."
 MISSING=0
 for cmd in python3 bgzip; do
   if ! command -v "$cmd" &>/dev/null; then
-    echo "  ❌ $cmd が見つかりません"
+    echo "  ❌ $cmd not found"
     MISSING=1
   fi
 done
 
-# samtools 1.x（modern）チェック
+# Find samtools 1.x
 SAMTOOLS="${SAMTOOLS:-}"
 for candidate in /opt/homebrew/bin/samtools /usr/local/bin/samtools samtools; do
   if command -v "$candidate" &>/dev/null; then
@@ -33,7 +33,7 @@ for candidate in /opt/homebrew/bin/samtools /usr/local/bin/samtools samtools; do
   fi
 done
 if [[ -z "$SAMTOOLS" ]]; then
-  echo "  ❌ samtools 1.x が見つかりません（brew install samtools）"
+  echo "  ❌ samtools 1.x not found (brew install samtools)"
   MISSING=1
 else
   echo "  ✅ samtools: $SAMTOOLS"
@@ -41,55 +41,52 @@ fi
 
 if [[ $MISSING -eq 1 ]]; then
   echo ""
-  echo "インストール方法:"
+  echo "Install missing tools with:"
   echo "  brew install samtools htslib"
   exit 1
 fi
-echo "  ✅ 全ての依存ツールが揃っています"
+echo "  ✅ All dependencies found"
 
-# ─── 引数チェック ───────────────────────────────────────────────
+# ─── Argument check ────────────────────────────────────────────────
 BAM="${1:-}"
 REF="${2:-}"
 
 if [[ -z "$BAM" || -z "$REF" ]]; then
-  echo "使い方: bash scripts/setup_viewer.sh <BAM> <FASTA>"
-  echo "例:     bash scripts/setup_viewer.sh n2_sorted.bam reference.fa"
+  echo "Usage: bash scripts/setup_viewer.sh <BAM> <FASTA>"
+  echo "Example: bash scripts/setup_viewer.sh n2_sorted.bam reference.fa"
   exit 1
 fi
 
-[[ -f "$BAM" ]]     || { echo "❌ BAMが見つかりません: $BAM"; exit 1; }
-[[ -f "${BAM}.bai" ]] || { echo "❌ BAIが見つかりません: ${BAM}.bai"; exit 1; }
-[[ -f "$REF" ]]     || { echo "❌ FASTAが見つかりません: $REF"; exit 1; }
-
-SAMTOOLS="${SAMTOOLS:-/opt/homebrew/bin/samtools}"
-command -v "$SAMTOOLS" &>/dev/null || SAMTOOLS="samtools"
+[[ -f "$BAM" ]]       || { echo "❌ BAM not found: $BAM"; exit 1; }
+[[ -f "${BAM}.bai" ]] || { echo "❌ BAI not found: ${BAM}.bai"; exit 1; }
+[[ -f "$REF" ]]       || { echo "❌ FASTA not found: $REF"; exit 1; }
 
 echo "========================================"
-echo " Alignment Viewer セットアップ"
+echo " Alignment Viewer Setup"
 echo " BAM : $BAM"
 echo " REF : $REF"
 echo "========================================"
 
-# ─── Step 1: リファレンスインデックス ──────────────────────────
+# ─── Step 1: Reference index ───────────────────────────────────────
 echo ""
-echo "Step 1/4: リファレンスのインデックス作成..."
+echo "Step 1/4: Indexing reference..."
 if [[ ! -f "${REF}.fai" ]]; then
   "$SAMTOOLS" faidx "$REF"
-  echo "   → ${REF}.fai 作成"
+  echo "   → ${REF}.fai created"
 else
-  echo "   → ${REF}.fai は既存のものを使用"
+  echo "   → ${REF}.fai already exists"
 fi
 
-# ─── Step 2: JSON生成 ───────────────────────────────────────────
+# ─── Step 2: Generate JSON files ───────────────────────────────────
 echo ""
-echo "Step 2/4: JSON生成 (coverage_bins / peak_loci)..."
+echo "Step 2/4: Generating JSON (coverage_bins / peak_loci)..."
 SAMTOOLS="$SAMTOOLS" python3 scripts/make_jsons.py "$BAM"
 
-# ─── Step 3: リファレンスFASTA抽出・変換 ───────────────────────
+# ─── Step 3: Extract & reformat reference FASTA ────────────────────
 echo ""
-echo "Step 3/4: リファレンスFASTA抽出（リードありscaffoldのみ）..."
+echo "Step 3/4: Extracting reference sequences (scaffolds with reads)..."
 
-# scaffoldリスト作成
+# Build scaffold list
 python3 -c "
 import json
 with open('output/peak_loci.json') as f:
@@ -99,12 +96,12 @@ for d in data:
 " > scaffold_list.txt
 echo "   → $(wc -l < scaffold_list.txt | tr -d ' ') scaffolds"
 
-# 抽出
-echo "   抽出中（時間がかかる場合あります）..."
+# Extract
+echo "   Extracting (this may take a while)..."
 xargs "$SAMTOOLS" faidx "$REF" < scaffold_list.txt > reads_ref_all.fa
 
-# 60文字/行に変換（IGV.js互換）
-echo "   60文字/行に変換中..."
+# Reformat to 60-char/line (required for IGV.js)
+echo "   Reformatting to 60 chars/line..."
 python3 << 'PYEOF'
 with open('reads_ref_all.fa') as fin, open('reads_ref60.fa', 'w') as fout:
     seq, name = [], None
@@ -124,13 +121,13 @@ with open('reads_ref_all.fa') as fin, open('reads_ref60.fa', 'w') as fout:
 PYEOF
 rm -f reads_ref_all.fa
 
-# インデックス作成
+# Index
 "$SAMTOOLS" faidx reads_ref60.fa
-echo "   → reads_ref60.fa ($(du -sh reads_ref60.fa | cut -f1)) 作成"
+echo "   → reads_ref60.fa ($(du -sh reads_ref60.fa | cut -f1)) created"
 
-# ─── Step 4: igv.html のURL更新 ────────────────────────────────
+# ─── Step 4: Update igv.html URLs ──────────────────────────────────
 echo ""
-echo "Step 4/4: igv.html を更新中..."
+echo "Step 4/4: Updating igv.html..."
 
 BAM_BASENAME="$(basename "$BAM")"
 
@@ -140,7 +137,6 @@ import re
 with open('igv.html') as f:
     html = f.read()
 
-# BAM URLを更新
 html = re.sub(
     r"url: BASE \+ '/[^']+\.bam'",
     "url: BASE + '/${BAM_BASENAME}'",
@@ -151,7 +147,6 @@ html = re.sub(
     "indexURL: BASE + '/${BAM_BASENAME}.bai'",
     html
 )
-# FASTA URLを更新（reads_ref60.faを常に使用）
 html = re.sub(
     r"fastaURL: BASE \+ '/[^']+'",
     "fastaURL: BASE + '/reads_ref60.fa'",
@@ -165,17 +160,17 @@ html = re.sub(
 
 with open('igv.html', 'w') as f:
     f.write(html)
-print('   → igv.html 更新完了')
+print('   → igv.html updated')
 PYEOF
 
-# ─── 完了 ──────────────────────────────────────────────────────
+# ─── Done ──────────────────────────────────────────────────────────
 echo ""
 echo "========================================"
-echo " ✅ セットアップ完了！"
+echo " ✅ Setup complete!"
 echo ""
-echo " 起動コマンド:"
+echo " Start the viewer:"
 echo "   python3 scripts/range_server.py"
 echo ""
-echo " ブラウザ:"
+echo " Then open:"
 echo "   http://localhost:8765/igv.html"
 echo "========================================"

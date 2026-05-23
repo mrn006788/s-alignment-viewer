@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-BAMファイルから以下のJSONを生成する:
-  output/all_scaffolds.json   - 全scaffold一覧
-  output/coverage_bins.json   - 100kbビンカバレッジ
-  output/peak_loci.json       - scaffold別ピーク位置
+Generate JSON files from a BAM file:
+  output/all_scaffolds.json   - all scaffolds with read counts
+  output/coverage_bins.json   - 100 kb bin coverage per scaffold
+  output/peak_loci.json       - peak read position per scaffold
 
-使い方:
-  python3 scripts/make_jsons.py <BAMファイル>
+Usage:
+  python3 scripts/make_jsons.py <BAM file>
 """
 import json, subprocess, sys, os
 
@@ -16,8 +16,8 @@ SAMTOOLS = os.environ.get('SAMTOOLS', 'samtools')
 OUT = 'output'
 os.makedirs(OUT, exist_ok=True)
 
-# ─── 1. all_scaffolds.json ──────────────────────────────────────
-print('① scaffold一覧を取得中 (samtools idxstats)...')
+# ─── 1. all_scaffolds.json ─────────────────────────────────────────
+print('① Getting scaffold list (samtools idxstats)...')
 res = subprocess.run([SAMTOOLS, 'idxstats', BAM],
                      capture_output=True, text=True, check=True)
 all_scaffolds = []
@@ -35,10 +35,10 @@ for line in res.stdout.strip().split('\n'):
 
 with open(f'{OUT}/all_scaffolds.json', 'w') as f:
     json.dump(all_scaffolds, f, separators=(',', ':'))
-print(f'   → {len(all_scaffolds)} scaffolds 保存')
+print(f'   → {len(all_scaffolds)} scaffolds saved')
 
-# ─── 2. coverage_bins.json ─────────────────────────────────────
-print('② カバレッジビンを計算中 (100kb/bin)...')
+# ─── 2. coverage_bins.json ─────────────────────────────────────────
+print('② Computing coverage bins (100 kb/bin)...')
 mapped = [s for s in all_scaffolds if s['reads'] > 0]
 cov_bins = []
 
@@ -71,14 +71,14 @@ for i, s in enumerate(mapped):
     })
 
     if (i + 1) % 50 == 0 or (i + 1) == len(mapped):
-        print(f'   {i+1}/{len(mapped)} 完了')
+        print(f'   {i+1}/{len(mapped)} done')
 
 with open(f'{OUT}/coverage_bins.json', 'w') as f:
     json.dump(cov_bins, f, separators=(',', ':'))
-print(f'   → {len(cov_bins)} scaffolds 保存')
+print(f'   → {len(cov_bins)} scaffolds saved')
 
-# ─── 3. peak_loci.json ─────────────────────────────────────────
-print('③ ピーク位置を計算中...')
+# ─── 3. peak_loci.json ─────────────────────────────────────────────
+print('③ Computing peak positions...')
 cov_sorted = sorted(cov_bins, key=lambda d: d['total_reads'], reverse=True)
 peaks = []
 
@@ -89,7 +89,7 @@ for i, d in enumerate(cov_sorted):
     bin_start = peak_i * BIN_SIZE
     bin_end   = (peak_i + 1) * BIN_SIZE
 
-    # ピークビン内の最頻出位置をsamtools viewで取得（上位50scaffoldのみ）
+    # For top 50 scaffolds: find the most frequent read position in the peak bin
     if i < 50:
         res = subprocess.run(
             [SAMTOOLS, 'view', BAM, f'{chr_name}:{bin_start}-{bin_end}'],
@@ -121,5 +121,5 @@ for i, d in enumerate(cov_sorted):
 
 with open(f'{OUT}/peak_loci.json', 'w') as f:
     json.dump(peaks, f, separators=(',', ':'))
-print(f'   → {len(peaks)} scaffolds 保存')
-print('✅ JSON生成完了')
+print(f'   → {len(peaks)} scaffolds saved')
+print('✅ JSON generation complete')
