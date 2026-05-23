@@ -147,7 +147,9 @@ async function loadData() {
 }
 
 function buildOverview() {
-  const sorted = [...allScaffolds].sort((a,b) => b.len - a.len);
+  // リードがマッピングされたscaffoldのみ表示（covMapに存在するもの）
+  const mapped = allScaffolds.filter(s => covMap[s.chr]);
+  const sorted = mapped.sort((a,b) => b.len - a.len);
   const N = sorted.length;
   const x=[],y=[],color=[],text=[],cdata=[];
   sorted.forEach((s,i) => {
@@ -170,7 +172,7 @@ function buildOverview() {
   const layout = {
     paper_bgcolor:'#0d0f1a',plot_bgcolor:'#131625',
     margin:{l:50,r:70,t:4,b:30},
-    xaxis:{title:{text:'← 長い順に '+N.toLocaleString()+' scaffolds →',font:{color:'#475569',size:10}},showgrid:false,zeroline:false,tickfont:{color:'#475569',size:9},range:[-50,N+50]},
+    xaxis:{title:{text:'← 長い順に '+N.toLocaleString()+' scaffolds（リードあり） →',font:{color:'#475569',size:10}},showgrid:false,zeroline:false,tickfont:{color:'#475569',size:9},range:[-2,N+2]},
     yaxis:{title:{text:'長さ (Mb)',font:{color:'#475569',size:10}},showgrid:true,gridcolor:'#1e2235',zeroline:false,tickfont:{color:'#475569',size:9}},
     showlegend:false,bargap:0,
   };

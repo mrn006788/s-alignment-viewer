@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>IGV Viewer — n1</title>
+<script src="https://cdn.jsdelivr.net/npm/igv@2.15.13/dist/igv.min.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0d0f1a;color:#e2e8f0;overflow:hidden}
+
+/* ヘッダー */
+#header{height:44px;background:#131625;border-bottom:1px solid #1e2235;display:flex;align-items:center;padding:0 14px;gap:8px;flex-shrink:0}
+#header h1{font-size:.9rem;font-weight:700;color:#818cf8}
+.badge{font-size:.7rem;background:#1e2235;border:1px solid #2d3455;color:#94a3b8;border-radius:4px;padding:2px 7px}
+.badge b{color:#a5b4fc}
+
+/* レイアウト */
+#body{display:flex;height:calc(100vh - 44px)}
+
+/* サイドバー */
+#sidebar{width:220px;flex-shrink:0;background:#0d0f1a;border-right:1px solid #1e2235;display:flex;flex-direction:column;overflow:hidden}
+#sidebar-header{padding:8px 10px;border-bottom:1px solid #1e2235;flex-shrink:0}
+#sidebar-header input{width:100%;background:#1e2235;border:1px solid #2d3455;color:#e2e8f0;border-radius:4px;padding:4px 8px;font-size:.75rem;outline:none}
+#sidebar-header input:focus{border-color:#6366f1}
+#scaffold-list{flex:1;overflow-y:auto;padding:4px 0}
+#scaffold-list::-webkit-scrollbar{width:4px}
+#scaffold-list::-webkit-scrollbar-track{background:#0d0f1a}
+#scaffold-list::-webkit-scrollbar-thumb{background:#2d3455;border-radius:2px}
+
+.sc-item{padding:6px 10px;cursor:pointer;border-left:3px solid transparent;transition:background .1s}
+.sc-item:hover{background:#1e2235}
+.sc-item.active{background:#1e2235;border-left-color:#6366f1}
+.sc-name{font-size:.75rem;color:#c7d2fe;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sc-meta{display:flex;gap:6px;margin-top:2px;align-items:center}
+.sc-reads{font-size:.68rem;color:#4ade80}
+.sc-len{font-size:.68rem;color:#475569}
+.sc-bar{flex:1;height:3px;background:#1e2235;border-radius:2px;overflow:hidden}
+.sc-bar-fill{height:100%;background:#4f46e5;border-radius:2px}
+
+/* メインエリア */
+#main{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
+#toolbar{padding:5px 12px;background:#131625;border-bottom:1px solid #1e2235;display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex-shrink:0}
+#toolbar label{font-size:.72rem;color:#64748b;white-space:nowrap}
+#toolbar input{background:#1e2235;border:1px solid #2d3455;color:#e2e8f0;border-radius:4px;padding:3px 7px;font-size:.75rem;outline:none;width:90px}
+#toolbar input:focus{border-color:#6366f1}
+#toolbar button{background:#4f46e5;color:#fff;border:none;border-radius:4px;padding:4px 10px;font-size:.75rem;cursor:pointer;white-space:nowrap}
+#toolbar button:hover{background:#6366f1}
+#toolbar button.sec{background:#1e2235;border:1px solid #2d3455;color:#94a3b8}
+#toolbar button.sec:hover{background:#2d3455;color:#e2e8f0}
+#status{font-size:.7rem;color:#f59e0b;padding:3px 12px;background:#131625;border-bottom:1px solid #1e2235;flex-shrink:0;min-height:20px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#igv-wrap{flex:1;background:#fff;overflow:hidden;min-height:0}
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>🔬 IGV Viewer — n1</h1>
+  <span class="badge">BAM: <b>n1_sorted.bam</b></span>
+  <span class="badge">403,994 reads (100% mapped)</span>
+  <span class="badge" id="badge-loc">—</span>
+</div>
+
+<div id="body">
+
+  <!-- サイドバー: scaffold一覧 -->
+  <div id="sidebar">
+    <div id="sidebar-header">
+      <input type="text" id="search" placeholder="🔍 scaffold を検索…" oninput="filterList()">
+    </div>
+    <div id="scaffold-list"></div>
+  </div>
+
+  <!-- メイン: IGV -->
+  <div id="main">
+    <div id="toolbar">
+      <label>Start:</label>
+      <input type="number" id="pos-s" placeholder="例: 8496000">
+      <label>End:</label>
+      <input type="number" id="pos-e" placeholder="例: 8497200">
+      <button onclick="jump()">移動</button>
+      <button class="sec" onclick="jumpToPeak()">ピークへ</button>
+      <button class="sec" onclick="zoomIn()">＋</button>
+      <button class="sec" onclick="zoomOut()">－</button>
+    </div>
+    <div id="status">読み込み中…</div>
+    <div id="igv-wrap"></div>
+  </div>
+
+</div>
+
+<script>
+const BASE = 'http://localhost:8765';
+let browser = null;
+let covMap = {};
+let covList = [];
+let activeChr = null;
+let maxReads = 1;
+
+function setStatus(msg) { document.getElementById('status').textContent = msg; }
+
+async function init() {
+  try {
+    const res = await fetch(BASE + '/output/peak_loci.json');
+    covList = await res.json();
+    covList.sort((a, b) => b.total_reads - a.total_reads);
+    covList.forEach(d => { covMap[d.chr] = d; });
+    maxReads = covList[0]?.total_reads || 1;
+    buildList(covList);
+    setStatus('IGV初期化中…');
+  } catch(e) {
+    setStatus('⚠ JSONロード失敗: サーバが起動しているか確認してください');
+    return;
+  }
+
+  const first = covList[0];
+  const initLocus = first ? first.locus : 'HiC_scaffold_3:8496000-8497200';
+
+  try {
+    browser = await igv.createBrowser(document.getElementById('igv-wrap'), {
+      showNavigation: true,
+      showRuler: true,
+      showCenterGuide: true,
+      showCursorTrackingGuide: true,
+      genome: {
+        id: 'n1',
+        name: 'n1 Assembly',
+        fastaURL: BASE + '/reads_ref60.fa',
+        indexURL: BASE + '/reads_ref60.fa.fai',
+      },
+      tracks: [{
+        type: 'alignment',
+        format: 'bam',
+        url: BASE + '/n1_sorted.bam',
+        indexURL: BASE + '/n1_sorted.bam.bai',
+        name: 'n1 Alignments',
+        height: 300,
+      }],
+      locus: initLocus,
+    });
+
+    browser.on('locuschange', e => {
+      const r = e && e[0];
+      if (r) {
+        const loc = r.chr + ':' + r.start.toLocaleString() + '–' + r.end.toLocaleString();
+        setStatus(loc + '  （幅: ' + (r.end - r.start).toLocaleString() + ' bp）');
+        document.getElementById('badge-loc').textContent = loc;
+        if (r.chr !== activeChr) setActive(r.chr);
+      }
+    });
+
+    if (first) setActive(first.chr);
+    setStatus('✅ 完了 — ' + initLocus);
+  } catch(e) {
+    setStatus('⚠ IGVエラー: ' + e.message);
+    console.error(e);
+  }
+}
+
+function buildList(list) {
+  const el = document.getElementById('scaffold-list');
+  el.innerHTML = '';
+  list.forEach(d => {
+    const item = document.createElement('div');
+    item.className = 'sc-item';
+    item.id = 'sc-' + d.chr;
+    const pct = Math.round((d.total_reads / maxReads) * 100);
+    item.innerHTML = `
+      <div class="sc-name" title="${d.chr}">${d.chr}</div>
+      <div class="sc-meta">
+        <span class="sc-reads">${d.total_reads.toLocaleString()} reads</span>
+        <span class="sc-len">${(d.len/1e6).toFixed(1)} Mb</span>
+      </div>
+      <div class="sc-bar"><div class="sc-bar-fill" style="width:${pct}%"></div></div>`;
+    item.onclick = () => selectScaffold(d.chr);
+    el.appendChild(item);
+  });
+}
+
+function filterList() {
+  const q = document.getElementById('search').value.toLowerCase();
+  const filtered = q ? covList.filter(d => d.chr.toLowerCase().includes(q)) : covList;
+  buildList(filtered);
+  if (activeChr) setActive(activeChr);
+}
+
+function setActive(chr) {
+  document.querySelectorAll('.sc-item.active').forEach(el => el.classList.remove('active'));
+  const el = document.getElementById('sc-' + chr);
+  if (el) {
+    el.classList.add('active');
+    el.scrollIntoView({ block: 'nearest' });
+  }
+  activeChr = chr;
+}
+
+function selectScaffold(chr) {
+  const d = covMap[chr];
+  if (!d || !browser) return;
+  setActive(chr);
+  browser.search(d.locus);
+}
+
+function jumpToPeak() {
+  if (!activeChr) return;
+  selectScaffold(activeChr);
+}
+
+function jump() {
+  if (!browser || !activeChr) return;
+  const s = parseInt(document.getElementById('pos-s').value);
+  const e = parseInt(document.getElementById('pos-e').value);
+  if (!s || !e) { jumpToPeak(); return; }
+  browser.search(activeChr + ':' + s + '-' + e);
+}
+
+function zoomIn()  { if (browser) browser.zoomIn(); }
+function zoomOut() { if (browser) browser.zoomOut(); }
+
+init();
+</script>
+</body>
+</html>
