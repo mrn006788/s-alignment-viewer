@@ -10,7 +10,7 @@
 		</data>
 		<key>Resources/Scripts/main.scpt</key>
 		<data>
-		cTMvI9q7goK97wcRApXlLvAXHoQ=
+		zn+7HTKtgLpaRekkH88fp4EWgt8=
 		</data>
 		<key>Resources/Scripts/make_jsons.py</key>
 		<data>
@@ -22,7 +22,7 @@
 		</data>
 		<key>Resources/Scripts/setup_viewer.sh</key>
 		<data>
-		pWLG2l+69fz00dEWL11tgeSYI3k=
+		1N4dopGeeAF2eJtiSMIdHGGUyT4=
 		</data>
 		<key>Resources/droplet.icns</key>
 		<data>
@@ -54,11 +54,11 @@
 		<dict>
 			<key>hash</key>
 			<data>
-			cTMvI9q7goK97wcRApXlLvAXHoQ=
+			zn+7HTKtgLpaRekkH88fp4EWgt8=
 			</data>
 			<key>hash2</key>
 			<data>
-			vtsq4RcBTM07Ycs9XX4tTPK9wb15Bb5PwdwO2JpVYiI=
+			0oz0HYAS/fbBqN0Yhmz8tQqps4y0iKT7uAqie7gdA1A=
 			</data>
 		</dict>
 		<key>Resources/Scripts/make_jsons.py</key>
@@ -87,11 +87,11 @@
 		<dict>
 			<key>hash</key>
 			<data>
-			pWLG2l+69fz00dEWL11tgeSYI3k=
+			1N4dopGeeAF2eJtiSMIdHGGUyT4=
 			</data>
 			<key>hash2</key>
 			<data>
-			cJn+L4+rpVdDy3VWJe5n8ITuG+Hx2CYAQoXnaMt2BXY=
+			qN/VE3ljjBYNxhmG9+FHl/VjRKTCA4NA8GAxk8KUjqU=
 			</data>
 		</dict>
 		<key>Resources/droplet.icns</key>

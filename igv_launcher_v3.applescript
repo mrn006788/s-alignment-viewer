@@ -1,6 +1,7 @@
 -- AlignmentViewer.app  (v3 — generic, no hardcoded paths)
--- Double-click : restart server from last workspace and open browser
+-- Double-click : select BAM via file picker → setup → open browser
 -- Drop BAM (+ optional FASTA) : run setup then open browser
+-- FASTA is optional: reference is auto-generated from BAM if not provided
 
 property serverPort : "8765"
 
@@ -69,23 +70,15 @@ on run
     -- Check if setup was already done (reads_ref60.fa exists)
     set hasRef to do shell script "test -f " & quoted form of (workDir & "/reads_ref60.fa") & " && echo yes || echo no"
     if hasRef is "yes" then
-        set choice to button returned of (display alert "Open viewer" message "Reference already set up in:" & return & workDir & return & return & "Open the viewer with this data?" buttons {"Select different FASTA", "Open"} default button "Open")
+        set choice to button returned of (display alert "Open viewer" message "Setup already done for:" & return & workDir & return & return & "Open the viewer?" buttons {"Re-run setup", "Open"} default button "Open")
         if choice is "Open" then
             startServer(workDir)
             return
         end if
     end if
 
-    -- Step 2: Select FASTA file
-    try
-        set faAlias to choose file with prompt "Select a reference FASTA file (.fa / .fasta / .fna):" without invisibles
-    on error number -128
-        return -- user cancelled
-    end try
-    set refFile to POSIX path of faAlias
-
-    -- Run setup
-    runSetup(bamFile, refFile, workDir)
+    -- Run setup (no FASTA needed — auto-generated from BAM)
+    runSetup(bamFile, "", workDir)
 end run
 
 -- ── Drag & drop ────────────────────────────────────────────────────
@@ -121,22 +114,19 @@ on open droppedFiles
         do shell script quoted form of samtoolsPath & " index " & quoted form of bamFile
     end if
 
-    -- FASTA handling
+    -- FASTA is optional: if not dropped, auto-generate from BAM
     if refFile is "" then
-        -- Check if setup was already run (reads_ref60.fa exists in workspace)
         set hasRef to do shell script "test -f " & quoted form of (workDir & "/reads_ref60.fa") & " && echo yes || echo no"
         if hasRef is "yes" then
-            -- Skip setup, just start server
-            set choice to button returned of (display alert "Reference found" message "reads_ref60.fa already exists in:" & return & workDir & return & return & "Skip setup and open the viewer?" buttons {"Cancel", "Open"} default button "Open")
-            if choice is "Cancel" then return
-            startServer(workDir)
-        else
-            display alert "Reference FASTA required" message "First-time setup needs a reference FASTA." & return & return & "Drop both .bam and .fa files together onto this app."
+            set choice to button returned of (display alert "Open viewer" message "Setup already done for:" & return & workDir & return & return & "Open the viewer?" buttons {"Re-run setup", "Open"} default button "Open")
+            if choice is "Open" then
+                startServer(workDir)
+                return
+            end if
         end if
-        return
     end if
 
-    -- Run setup
+    -- Run setup (FASTA may be empty — consensus generated automatically)
     runSetup(bamFile, refFile, workDir)
 end open
 
@@ -145,7 +135,13 @@ on runSetup(bamPath, refPath, workDir)
     set sd to scriptsDirPath()
     set tmpl to igvTemplatePath()
 
-    set setupCmd to "SCRIPTS_DIR=" & quoted form of sd & " IGV_TEMPLATE=" & quoted form of tmpl & " bash " & quoted form of (sd & "setup_viewer.sh") & " " & quoted form of bamPath & " " & quoted form of refPath & " " & quoted form of workDir
+    -- Build command (workspace passed via env var to avoid positional ambiguity)
+    set envVars to "SCRIPTS_DIR=" & quoted form of sd & " IGV_TEMPLATE=" & quoted form of tmpl & " VIEWER_WORKSPACE=" & quoted form of workDir
+    if refPath is "" then
+        set setupCmd to envVars & " bash " & quoted form of (sd & "setup_viewer.sh") & " " & quoted form of bamPath
+    else
+        set setupCmd to envVars & " bash " & quoted form of (sd & "setup_viewer.sh") & " " & quoted form of bamPath & " " & quoted form of refPath
+    end if
 
     tell application "Terminal"
         activate

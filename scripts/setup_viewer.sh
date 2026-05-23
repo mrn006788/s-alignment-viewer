@@ -32,7 +32,7 @@ done
 SAMTOOLS="${SAMTOOLS:-}"
 for candidate in /opt/homebrew/bin/samtools /usr/local/bin/samtools samtools; do
   if command -v "$candidate" &>/dev/null; then
-    ver=$("$candidate" --version 2>&1 | grep 'Version:' | awk '{print $2}' | cut -d. -f1)
+    ver=$("$candidate" --version 2>&1 | head -1 | awk '{print $2}' | cut -d. -f1)
     if [[ "${ver:-0}" -ge 1 ]]; then
       SAMTOOLS="$candidate"
       break
@@ -56,70 +56,79 @@ echo "  ✅ All dependencies found"
 
 # ─── Argument check ────────────────────────────────────────────────
 BAM="${1:-}"
-REF="${2:-}"
+REF="${2:-}"   # optional: reference FASTA
 
-if [[ -z "$BAM" || -z "$REF" ]]; then
-  echo "Usage: bash setup_viewer.sh <BAM> <FASTA> [workspace]"
-  echo "Example: bash setup_viewer.sh sample.bam reference.fa /path/to/workspace"
+if [[ -z "$BAM" ]]; then
+  echo "Usage: bash setup_viewer.sh <BAM> [FASTA] [workspace]"
+  echo "  FASTA is optional — consensus is auto-generated from BAM if omitted"
+  echo "Example: bash setup_viewer.sh sample.bam"
+  echo "         bash setup_viewer.sh sample.bam reference.fa /path/to/workspace"
   exit 1
 fi
 
-# Resolve absolute paths
+# Resolve absolute path for BAM
 BAM="$(cd "$(dirname "$BAM")" && pwd)/$(basename "$BAM")"
-REF="$(cd "$(dirname "$REF")" && pwd)/$(basename "$REF")"
 
-# Workspace: 3rd argument, or directory containing BAM
-WORKSPACE="${3:-$(dirname "$BAM")}"
+# Resolve REF only if provided
+if [[ -n "$REF" && "$REF" != /* ]]; then
+  REF="$(cd "$(dirname "$REF")" && pwd)/$(basename "$REF")"
+fi
+
+# Workspace: VIEWER_WORKSPACE env var, 3rd argument, or directory containing BAM
+WORKSPACE="${VIEWER_WORKSPACE:-${3:-$(dirname "$BAM")}}"
 mkdir -p "$WORKSPACE"
 cd "$WORKSPACE"
 
 [[ -f "$BAM" ]]       || { echo "❌ BAM not found: $BAM"; exit 1; }
-[[ -f "${BAM}.bai" ]] || { echo "❌ BAI not found: ${BAM}.bai"; exit 1; }
-[[ -f "$REF" ]]       || { echo "❌ FASTA not found: $REF"; exit 1; }
+[[ -f "${BAM}.bai" ]] || { echo "❌ BAI not found: ${BAM}.bai  (run: samtools index $BAM)"; exit 1; }
+if [[ -n "$REF" ]]; then
+  [[ -f "$REF" ]] || { echo "❌ FASTA not found: $REF"; exit 1; }
+fi
 
 echo "========================================"
 echo " Alignment Viewer Setup"
 echo " BAM       : $BAM"
-echo " REF       : $REF"
+if [[ -n "$REF" ]]; then
+  echo " REF       : $REF"
+else
+  echo " REF       : (auto-generate from BAM)"
+fi
 echo " Workspace : $WORKSPACE"
 echo "========================================"
 
-# ─── Step 1: Reference index ───────────────────────────────────────
+# ─── Step 1: Generate JSON files ───────────────────────────────────
 echo ""
-echo "Step 1/4: Indexing reference..."
-if [[ ! -f "${REF}.fai" ]]; then
-  "$SAMTOOLS" faidx "$REF"
-  echo "   → ${REF}.fai created"
-else
-  echo "   → ${REF}.fai already exists"
-fi
-
-# ─── Step 2: Generate JSON files ───────────────────────────────────
-echo ""
-echo "Step 2/5: Generating JSON (coverage_bins / peak_loci)..."
+echo "Step 1/4: Generating JSON (coverage_bins / peak_loci)..."
 SAMTOOLS="$SAMTOOLS" python3 "$SCRIPTS_DIR/make_jsons.py" "$BAM"
 
-# ─── Step 3: Extract & reformat reference FASTA ────────────────────
+# ─── Step 2: Generate reference FASTA ─────────────────────────────
 echo ""
-echo "Step 3/5: Extracting reference sequences (scaffolds with reads)..."
+if [[ -n "$REF" ]]; then
+  echo "Step 2/4: Extracting reference sequences from FASTA..."
 
-# Build scaffold list
-python3 -c "
+  # Index the reference if needed
+  if [[ ! -f "${REF}.fai" ]]; then
+    "$SAMTOOLS" faidx "$REF"
+    echo "   → ${REF}.fai created"
+  fi
+
+  # Build scaffold list from JSON
+  python3 -c "
 import json
 with open('output/peak_loci.json') as f:
     data = json.load(f)
 for d in data:
     print(d['chr'])
 " > scaffold_list.txt
-echo "   → $(wc -l < scaffold_list.txt | tr -d ' ') scaffolds"
+  echo "   → $(wc -l < scaffold_list.txt | tr -d ' ') scaffolds"
 
-# Extract
-echo "   Extracting (this may take a while)..."
-xargs "$SAMTOOLS" faidx "$REF" < scaffold_list.txt > reads_ref_all.fa
+  # Extract scaffolds
+  echo "   Extracting..."
+  xargs "$SAMTOOLS" faidx "$REF" < scaffold_list.txt > reads_ref_all.fa
 
-# Reformat to 60-char/line (required for IGV.js)
-echo "   Reformatting to 60 chars/line..."
-python3 << 'PYEOF'
+  # Reformat to 60-char/line (required for IGV.js)
+  echo "   Reformatting to 60 chars/line..."
+  python3 << 'PYEOF'
 with open('reads_ref_all.fa') as fin, open('reads_ref60.fa', 'w') as fout:
     seq, name = [], None
     def flush():
@@ -136,9 +145,33 @@ with open('reads_ref_all.fa') as fin, open('reads_ref60.fa', 'w') as fout:
             seq.append(line)
     flush()
 PYEOF
-rm -f reads_ref_all.fa
+  rm -f reads_ref_all.fa
 
-# Index
+else
+  echo "Step 2/4: Generating consensus FASTA from BAM (no reference provided)..."
+  echo "   Running samtools consensus (this may take a while)..."
+
+  # Generate consensus then reformat to 60-char/line
+  "$SAMTOOLS" consensus -f fasta "$BAM" 2>/dev/null | python3 -c "
+import sys
+seq, name = [], None
+def flush():
+    if name:
+        sys.stdout.write(name + '\n')
+        s = ''.join(seq)
+        for i in range(0, len(s), 60):
+            sys.stdout.write(s[i:i+60] + '\n')
+for line in sys.stdin:
+    line = line.rstrip()
+    if line.startswith('>'):
+        flush(); name = line; seq = []
+    else:
+        seq.append(line)
+flush()
+" > reads_ref60.fa
+fi
+
+# Index the generated FASTA
 "$SAMTOOLS" faidx reads_ref60.fa
 echo "   → reads_ref60.fa ($(du -sh reads_ref60.fa | cut -f1)) created"
 
