@@ -77,8 +77,15 @@ on run
         end if
     end if
 
-    -- Run setup (no FASTA needed — auto-generated from BAM)
-    runSetup(bamFile, "", workDir)
+    -- Step 2: Select reference FASTA
+    try
+        set faAlias to choose file with prompt "Select a reference FASTA file (.fa / .fasta / .fna):" without invisibles
+    on error number -128
+        return -- user cancelled
+    end try
+    set refFile to POSIX path of faAlias
+
+    runSetup(bamFile, refFile, workDir)
 end run
 
 -- ── Drag & drop ────────────────────────────────────────────────────
@@ -114,8 +121,9 @@ on open droppedFiles
         do shell script quoted form of samtoolsPath & " index " & quoted form of bamFile
     end if
 
-    -- FASTA is optional: if not dropped, auto-generate from BAM
+    -- FASTA handling
     if refFile is "" then
+        -- Check if setup was already run (reads_ref60.fa exists in workspace)
         set hasRef to do shell script "test -f " & quoted form of (workDir & "/reads_ref60.fa") & " && echo yes || echo no"
         if hasRef is "yes" then
             set choice to button returned of (display alert "Open viewer" message "Setup already done for:" & return & workDir & return & return & "Open the viewer?" buttons {"Re-run setup", "Open"} default button "Open")
@@ -123,10 +131,12 @@ on open droppedFiles
                 startServer(workDir)
                 return
             end if
+        else
+            display alert "Reference FASTA required" message "Please also drop a reference FASTA file (.fa / .fasta / .fna) onto the app."
+            return
         end if
     end if
 
-    -- Run setup (FASTA may be empty — consensus generated automatically)
     runSetup(bamFile, refFile, workDir)
 end open
 
