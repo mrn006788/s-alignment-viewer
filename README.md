@@ -39,44 +39,42 @@ samtools --version   # should show 1.x or later
 bgzip --version
 ```
 
-### Step 3 — Drop your files onto the app
+### Step 3 — Launch and select your files
 
-Drag and drop your **BAM file** (and the matching **reference FASTA**) onto `AlignmentViewer.app`.
+Double-click `AlignmentViewer.app`. File picker dialogs will appear:
 
-```
-sample.bam        ← sorted BAM
-sample.bam.bai    ← index (auto-created if missing)
-reference.fa      ← reference genome
-```
-
-> Drop both files **at the same time** for first-time setup.  
-> After setup, dropping only the BAM will reopen the viewer directly.
+1. **Select your BAM file** (sorted; index `.bai` is auto-created if missing)
+2. **Select your reference FASTA file** (`.fa` / `.fasta` / `.fna`)
 
 A Terminal window will open and run the setup (a few minutes on first run).  
 When finished, the viewer opens automatically in your browser.
 
+> **Drag & drop:** You can also drop a BAM + FASTA onto the app icon at the same time.
+
 ### Step 4 — Next time: just double-click
 
-Double-clicking `AlignmentViewer.app` restarts the server and reopens the last dataset.
+Double-clicking `AlignmentViewer.app` restarts the server and reopens the last dataset.  
+If setup was already done, you can also choose **Open** when prompted.
 
 ---
 
 ## Interface
 
 ```
-┌──────────────────────────────────────────────┐
-│ 🔬 IGV Viewer                                │
-├──────────────┬───────────────────────────────┤
-│ 🔍 Search    │  Start:[      ] End:[      ]  │
-│  scaffold    │  [Go] [Peak] [+] [−]          │
-│──────────────│───────────────────────────────│
-│ scaffold_3   │                               │
-│ 76,439 reads │       Alignment display       │
-│ ████████░░   │   (click sidebar to navigate) │
-│ scaffold_2   │                               │
-│ 36,571 reads │                               │
-│ ████░░░░░░   │                               │
-└──────────────┴───────────────────────────────┘
+┌──────────────────────────────────────────────────┐
+│ 🔬 IGV Viewer                                    │
+├────────────────┬─────────────────────────────────┤
+│ 🔍 Search      │  Start:[      ] End:[      ]    │
+│  scaffold…     │  [Go] [Peak] [+] [−]            │
+│ Min reads: 1   │─────────────────────────────────│
+│ ━━━━━━━━━━━━   │                                 │
+│ scaffold_3     │       Alignment display          │
+│ 76,439 reads   │   (click sidebar to navigate)   │
+│ ████████░░     │                                 │
+│ scaffold_2     │                                 │
+│ 36,571 reads   │                                 │
+│ ████░░░░░░     │                                 │
+└────────────────┴─────────────────────────────────┘
 ```
 
 | Action | How |
@@ -86,12 +84,13 @@ Double-clicking `AlignmentViewer.app` restarts the server and reopens the last d
 | Navigate to coordinates | Enter Start / End → **Go** |
 | Zoom in / out | **+** / **−** buttons or mouse wheel |
 | Search scaffold by name | Type in the search box (top-left) |
+| Filter by minimum reads | Drag the **Min reads** slider |
 
 ---
 
 ## Switching to a different dataset
 
-Drop the new `.bam` + `.fa` files onto `AlignmentViewer.app` again.  
+Drop the new `.bam` + `.fa` files onto `AlignmentViewer.app`, or double-click and select new files.  
 Setup runs automatically and the viewer switches to the new data.
 
 ---
@@ -127,6 +126,7 @@ samtools index sample.bam
 | No reads displayed | Check that BAM is sorted and indexed (`.bai` exists) |
 | Browser doesn't open | Open manually: `http://localhost:8765/igv.html` |
 | Setup seems stuck | Check the Terminal window for error messages |
+| Reference not visible | Zoom in further with **+** or mouse wheel |
 
 ---
 
