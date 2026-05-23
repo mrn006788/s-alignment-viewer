@@ -32,7 +32,7 @@ done
 SAMTOOLS="${SAMTOOLS:-}"
 for candidate in /opt/homebrew/bin/samtools /usr/local/bin/samtools samtools; do
   if command -v "$candidate" &>/dev/null; then
-    ver=$("$candidate" 2>&1 | grep 'Version:' | awk '{print $2}' | cut -d. -f1)
+    ver=$("$candidate" --version 2>&1 | grep 'Version:' | awk '{print $2}' | cut -d. -f1)
     if [[ "${ver:-0}" -ge 1 ]]; then
       SAMTOOLS="$candidate"
       break
