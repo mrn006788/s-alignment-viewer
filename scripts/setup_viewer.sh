@@ -163,6 +163,17 @@ with open('igv.html', 'w') as f:
 print('   → igv.html updated')
 PYEOF
 
+# ─── Step 5: Re-sign app ───────────────────────────────────────────
+echo ""
+echo "Step 5/5: Signing AlignmentViewer.app..."
+if [[ -d "$ROOT_DIR/AlignmentViewer.app" ]]; then
+  codesign --force --deep --sign - "$ROOT_DIR/AlignmentViewer.app" \
+    && echo "   → Signed successfully" \
+    || echo "   ⚠️  Signing failed (run: bash scripts/sign_app.sh)"
+else
+  echo "   ⚠️  AlignmentViewer.app not found, skipping"
+fi
+
 # ─── Done ──────────────────────────────────────────────────────────
 echo ""
 echo "========================================"
