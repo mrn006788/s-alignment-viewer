@@ -135,7 +135,7 @@ samtools index sample.bam
 Clone the repository and rebuild the app after editing scripts:
 
 ```bash
-git clone https://github.com/mrn006788/s-alignment-viewer.git
+git clone https://github.com/marin-nk-vimic/s-alignment-viewer.git
 cd s-alignment-viewer
 bash scripts/build_app.sh
 ```
